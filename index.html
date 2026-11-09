@@ -1,0 +1,1541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ECEFF2">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0F151B">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Morse Lab">
+<title>Morse Code Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column like a field radio log. Segmented controls on top, mono readouts for anything the decoder or encoder produces. */
+:root {
+  --bg: #ECEFF2;
+  --panel: #FFFFFF;
+  --ink: #16202A;
+  --muted: #566370;
+  --line: #C9D1D8;
+  --soft: #E3E8EC;
+  --accent: #0A6C88;
+  --on-accent: #FFFFFF;
+  --good: #1F6F46;
+  --bad: #B03A2E;
+  --warn-bg: #FFF1CC;
+  --warn-ink: #5A3F00;
+  --warn-line: #E6C766;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F151B; --panel: #17202A; --ink: #E3E9EE; --muted: #93A1AD; --line: #2A3642; --soft: #202B36;
+    --accent: #5CC3DC; --on-accent: #06212A; --good: #5CC48B; --bad: #F2897D;
+    --warn-bg: #3A2F10; --warn-ink: #F2D88A; --warn-line: #6B5619;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F151B; --panel: #17202A; --ink: #E3E9EE; --muted: #93A1AD; --line: #2A3642; --soft: #202B36;
+  --accent: #5CC3DC; --on-accent: #06212A; --good: #5CC48B; --bad: #F2897D;
+  --warn-bg: #3A2F10; --warn-ink: #F2D88A; --warn-line: #6B5619;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 var(--sans);
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.shell { max-width: 640px; margin: 0 auto; display: grid; gap: 16px; }
+h1 { font-size: 24px; line-height: 1.2; margin: 0; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 17px; line-height: 1.3; margin: 0; font-weight: 600; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.hint { margin: 0; color: var(--muted); font-size: 14px; }
+.lbl { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--soft); border-radius: 10px; }
+.seg button { min-height: 44px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 600 15px var(--sans); cursor: pointer; padding: 0 8px; }
+.seg button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.tabs button { min-height: 44px; border: 0; background: transparent; color: var(--muted); font: 600 15px var(--sans); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; padding: 0 4px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+
+.panel { display: grid; gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label, .check { font-size: 14px; font-weight: 500; }
+.check { display: flex; gap: 8px; align-items: center; min-height: 32px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 15px var(--sans); cursor: pointer; text-align: center; }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+input[type="text"], input[type="number"], select, textarea {
+  width: 100%; font: 16px var(--sans); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-height: 44px;
+}
+textarea { resize: vertical; font-family: var(--mono); }
+input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px; }
+output { font-family: var(--mono); font-weight: 500; }
+
+.out { font: 500 17px/1.5 var(--mono); background: var(--soft); border-radius: 8px; padding: 12px; min-height: 3.2em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.out.morse { letter-spacing: 0.08em; font-size: 16px; }
+.out.empty { color: var(--muted); font-weight: 400; font-size: 15px; font-family: var(--sans); }
+.stats { display: flex; gap: 4px 16px; flex-wrap: wrap; font: 500 13px var(--mono); color: var(--muted); }
+.meter { height: 8px; border-radius: 4px; background: var(--soft); overflow: hidden; }
+.meter > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.12s linear; }
+.note { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); border-radius: 8px; padding: 12px; font-size: 14px; }
+.err { margin: 0; color: var(--bad); font-size: 14px; }
+.map { font: 500 14px/1.6 var(--mono); letter-spacing: 0.12em; overflow-wrap: anywhere; }
+.map span { display: block; }
+.map .to { color: var(--accent); }
+
+.chars { font: 600 22px/1.3 var(--mono); letter-spacing: 0.18em; overflow-wrap: anywhere; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; }
+.key { min-width: 44px; min-height: 44px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 18px var(--mono); cursor: pointer; padding: 0 8px; }
+.good { color: var(--good); }
+.bad { color: var(--bad); }
+.chart { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.cbtn { display: grid; gap: 2px; justify-items: center; padding: 8px 4px; min-height: 60px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+.cbtn b { font: 600 20px/1.1 var(--mono); }
+.cbtn span { font: 500 12px var(--mono); color: var(--muted); letter-spacing: 0.15em; }
+
+.overlay { position: fixed; inset: 0; z-index: 20; background: rgba(8, 12, 16, 0.6); display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
+.dialog { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; max-width: 460px; width: 100%; display: grid; gap: 12px; }
+.dialog p { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .meter > i { transition: none; } }
+</style>
+
+<script>
+/* First script error wins and is shown at the top, so a viewer app that breaks the page still tells us why. */
+(function () {
+  var shown = false;
+  window.addEventListener('error', function (e) {
+    if (shown) return;
+    shown = true;
+    var b = document.getElementById('boot');
+    if (!b) return;
+    b.hidden = false;
+    b.textContent = 'A script error stopped the page: ' + (e.message || 'unknown error') + (e.lineno ? ' (line ' + e.lineno + ')' : '') + '. Send this text to Claude.';
+  });
+})();
+</script>
+</head>
+<body>
+<div class="shell">
+  <div class="note" id="boot" role="alert">Scripts are not running, so the buttons will not work. Turn on JavaScript in this app's settings, or open the saved file in Chrome.</div>
+  <header>
+    <h1>Morse Code Lab</h1>
+    <p class="sub">Decode, send and learn Morse code.</p>
+  </header>
+
+  <div class="seg" role="group" aria-label="Morse mode">
+    <button type="button" id="mode-plain" class="on" aria-pressed="true">Plain Morse</button>
+    <button type="button" id="mode-enc" aria-pressed="false">Encoded</button>
+  </div>
+
+  <section id="cipher-card" class="card" hidden aria-label="Cipher settings">
+    <h2>Cipher</h2>
+    <div class="field">
+      <label for="cipher-kind">Type</label>
+      <select id="cipher-kind">
+        <option value="caesar">Caesar shift</option>
+        <option value="auto">Auto Shift</option>
+        <option value="keyword">Keyword alphabet</option>
+        <option value="custom">Custom alphabet</option>
+      </select>
+    </div>
+    <div class="field" id="cf-caesar">
+      <label for="cipher-shift">Shift: <output id="shift-val">6</output></label>
+      <input id="cipher-shift" type="range" min="1" max="25" value="6">
+      <label class="check"><input id="cipher-digits" type="checkbox"> Shift digits too</label>
+    </div>
+    <div class="field" id="cf-auto" hidden>
+      <div class="lbl" style="margin:0" id="auto-day">Today, Pacific time</div>
+      <div class="out" id="auto-calc" aria-live="polite"></div>
+      <p class="hint" id="auto-note" hidden></p>
+      <label class="check"><input id="auto-digits" type="checkbox"> Shift digits too</label>
+      <label for="auto-date">Use another date (blank means today)</label>
+      <div class="row">
+        <input id="auto-date" type="date" style="flex:1 1 160px; width:auto">
+        <button type="button" class="btn" id="auto-today">Use today</button>
+      </div>
+    </div>
+    <div class="field" id="cf-keyword" hidden>
+      <label for="cipher-keyword">Keyword</label>
+      <input id="cipher-keyword" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ZEBRA">
+    </div>
+    <div class="field" id="cf-custom" hidden>
+      <label for="cipher-custom">Your 26 letters, each used once</label>
+      <input id="cipher-custom" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="QWERTYUIOPASDFGHJKLZXCVBNM">
+    </div>
+    <p id="cipher-err" class="err" hidden></p>
+    <div class="map" aria-label="Letter mapping">
+      <span>ABCDEFGHIJKLMNOPQRSTUVWXYZ</span>
+      <span class="to" id="map-row"></span>
+    </div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" id="tab-listen" data-tab="listen" aria-selected="true">Listen</button>
+    <button type="button" role="tab" id="tab-file" data-tab="file" aria-selected="false">File</button>
+    <button type="button" role="tab" id="tab-send" data-tab="send" aria-selected="false">Send</button>
+    <button type="button" role="tab" id="tab-learn" data-tab="learn" aria-selected="false">Learn</button>
+  </nav>
+
+  <main>
+    <section class="panel" data-panel="listen" role="tabpanel" aria-labelledby="tab-listen">
+      <div class="card">
+        <h2>Live decode</h2>
+        <p class="hint">Listens through the microphone while this page is open. Audio stays on this device.</p>
+        <div class="meter" aria-hidden="true"><i id="level"></i></div>
+        <div class="stats" id="live-stats"><span>Not listening</span></div>
+        <div class="row"><button type="button" class="btn primary" id="live-btn">Start listening</button></div>
+        <div class="note" id="mic-msg" hidden></div>
+        <div class="stats" id="mic-diag" hidden></div>
+        <div>
+          <div class="lbl">Decoded</div>
+          <div class="out empty" id="live-out" aria-live="polite">Start listening, then play Morse audio near the microphone.</div>
+        </div>
+        <div id="live-dec-wrap" hidden>
+          <div class="lbl">Deciphered</div>
+          <div class="out" id="live-dec"></div>
+        </div>
+        <div class="row"><button type="button" class="btn" id="live-copy">Copy text</button></div>
+      </div>
+      <div class="card">
+        <h2>Record with your phone</h2>
+        <p class="hint">If live listening is blocked, record the Morse with your phone's recorder. The recording is decoded right after.</p>
+        <div class="row">
+          <label class="btn" for="rec-input">Record and decode</label>
+          <input id="rec-input" type="file" accept="audio/*" capture hidden>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="file" role="tabpanel" aria-labelledby="tab-file" hidden>
+      <div class="card">
+        <h2>Decode an audio file</h2>
+        <p class="hint">MP3, WAV, M4A, OGG or whatever your phone can play. Decoding happens on this device.</p>
+        <div class="row">
+          <label class="btn primary" for="file-input">Choose audio file</label>
+          <input id="file-input" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac" hidden>
+        </div>
+        <div class="stats" id="file-stats"><span>No file chosen</span></div>
+        <div class="field">
+          <label for="file-tone">Tone pitch in Hz (blank finds it automatically)</label>
+          <input id="file-tone" type="number" inputmode="numeric" min="200" max="2000" placeholder="auto">
+        </div>
+        <div class="row"><button type="button" class="btn" id="file-redo" disabled>Decode again</button></div>
+        <div>
+          <div class="lbl">Decoded</div>
+          <div class="out empty" id="file-out" aria-live="polite">Choose a file to see the text here.</div>
+        </div>
+        <div id="file-dec-wrap" hidden>
+          <div class="lbl">Deciphered</div>
+          <div class="out" id="file-dec"></div>
+        </div>
+        <div class="row"><button type="button" class="btn" id="file-copy">Copy text</button></div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="send" role="tabpanel" aria-labelledby="tab-send" hidden>
+      <div class="card">
+        <h2>Text to Morse</h2>
+        <div class="field">
+          <label for="send-text">Message (example text, replace it)</label>
+          <textarea id="send-text" rows="3" maxlength="400" spellcheck="false">THE QUICK BROWN FOX 123</textarea>
+        </div>
+        <div id="send-enc-wrap" hidden>
+          <div class="lbl">Sent as (enciphered)</div>
+          <div class="out" id="send-enc"></div>
+        </div>
+        <div>
+          <div class="lbl">Morse</div>
+          <div class="out morse" id="send-morse"></div>
+        </div>
+        <div id="send-speed"></div>
+        <div class="row">
+          <button type="button" class="btn primary" id="send-play">Play</button>
+          <button type="button" class="btn" id="send-copy">Copy Morse</button>
+        </div>
+      </div>
+      <div class="card" id="hand-card" hidden>
+        <h2>Cipher by hand</h2>
+        <p class="hint">Paste a message to encipher or decipher it with the settings above.</p>
+        <div class="field">
+          <label for="hand-in">Message</label>
+          <textarea id="hand-in" rows="3" maxlength="400" spellcheck="false"></textarea>
+        </div>
+        <div class="row">
+          <button type="button" class="btn" id="hand-enc">Encipher</button>
+          <button type="button" class="btn" id="hand-dec">Decipher</button>
+        </div>
+        <div class="out empty" id="hand-out">The result shows here.</div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="learn" role="tabpanel" aria-labelledby="tab-learn" hidden>
+      <div class="card">
+        <h2>Koch trainer</h2>
+        <p class="hint">Hear a group of 5 characters and type what you heard. Reach 90% over 50 characters to unlock the next one.</p>
+        <div class="lbl" style="margin:0">Characters in play</div>
+        <div class="chars" id="koch-chars"></div>
+        <div class="stats" id="koch-info"></div>
+        <div id="koch-speed"></div>
+        <div class="row">
+          <button type="button" class="btn primary" id="koch-play">Play new group</button>
+          <button type="button" class="btn" id="koch-replay" disabled>Replay</button>
+        </div>
+        <div class="field">
+          <label for="koch-answer">What you heard</label>
+          <input id="koch-answer" type="text" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        </div>
+        <div class="keys" id="koch-keys"></div>
+        <div class="row">
+          <button type="button" class="btn" id="koch-del">Delete</button>
+          <button type="button" class="btn primary" id="koch-check">Check</button>
+        </div>
+        <div class="out empty" id="koch-result" aria-live="polite">Play a group to start.</div>
+        <div class="meter" aria-hidden="true"><i id="koch-bar"></i></div>
+        <div class="stats" id="koch-prog"></div>
+        <div class="row"><button type="button" class="btn" id="koch-reset">Reset progress</button></div>
+      </div>
+      <div class="card">
+        <h2>Reference chart</h2>
+        <p class="hint">Tap a character to hear it.</p>
+        <div class="chart" id="chart"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="dlg" class="overlay" role="dialog" aria-modal="true" aria-labelledby="dlg-title" hidden>
+  <div class="dialog">
+    <h2 id="dlg-title"></h2>
+    <p id="dlg-body"></p>
+    <p class="hint">You are responsible for following FCC rules where you operate. This is general information, not legal advice.</p>
+    <div class="row">
+      <button type="button" class="btn" id="dlg-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="dlg-ok">I understand</button>
+    </div>
+  </div>
+</div>
+
+<script>/* Morse Code Lab core: decoder, Morse audio, cipher, Koch trainer logic.
+   Same algorithm as the Rust core in morse-app/core. No dependencies. */
+(function (g) {
+  'use strict';
+
+  /* ---------- Morse table ---------- */
+  const MORSE = [
+    ['A', '.-'], ['B', '-...'], ['C', '-.-.'], ['D', '-..'], ['E', '.'], ['F', '..-.'],
+    ['G', '--.'], ['H', '....'], ['I', '..'], ['J', '.---'], ['K', '-.-'], ['L', '.-..'],
+    ['M', '--'], ['N', '-.'], ['O', '---'], ['P', '.--.'], ['Q', '--.-'], ['R', '.-.'],
+    ['S', '...'], ['T', '-'], ['U', '..-'], ['V', '...-'], ['W', '.--'], ['X', '-..-'],
+    ['Y', '-.--'], ['Z', '--..'],
+    ['0', '-----'], ['1', '.----'], ['2', '..---'], ['3', '...--'], ['4', '....-'],
+    ['5', '.....'], ['6', '-....'], ['7', '--...'], ['8', '---..'], ['9', '----.'],
+    ['.', '.-.-.-'], [',', '--..--'], ['?', '..--..'], ["'", '.----.'], ['!', '-.-.--'],
+    ['/', '-..-.'], ['(', '-.--.'], [')', '-.--.-'], ['&', '.-...'], [':', '---...'],
+    [';', '-.-.-.'], ['=', '-...-'], ['+', '.-.-.'], ['-', '-....-'], ['_', '..--.-'],
+    ['"', '.-..-.'], ['$', '...-..-'], ['@', '.--.-.']
+  ];
+  const ENC = Object.create(null);
+  const DEC = Object.create(null);
+  for (const [c, p] of MORSE) { ENC[c] = p; DEC[p] = c; }
+  const encodeChar = (c) => ENC[c.toUpperCase()] || null;
+  const decodePattern = (p) => DEC[p] || null;
+
+  function toMorseString(text) {
+    const words = text.trim().split(/\s+/)
+      .map((w) => Array.from(w).map(encodeChar).filter(Boolean).join(' '))
+      .filter(Boolean);
+    return words.join('  /  ');
+  }
+
+  /* ---------- Timing and audio ---------- */
+  // Farnsworth: characters at charWpm, extra space stretched to reach effWpm.
+  function timing(charWpm, effWpm) {
+    const dit = 1.2 / charWpm;
+    const eff = Math.min(effWpm || charWpm, charWpm);
+    const tf = eff < charWpm ? (60 / eff - 37.2 / charWpm) / 19 : dit;
+    return { dit, tf, eff };
+  }
+
+  // Text to [[keyDown, seconds], ...]
+  function schedule(text, charWpm, effWpm) {
+    const { dit, tf } = timing(charWpm, effWpm);
+    const out = [];
+    let firstWord = true;
+    for (const word of text.trim().split(/\s+/)) {
+      let started = false;
+      let firstChar = true;
+      for (const ch of Array.from(word)) {
+        const p = encodeChar(ch);
+        if (!p) continue;
+        if (!started) {
+          if (!firstWord) out.push([false, 7 * tf]);
+          firstWord = false;
+          started = true;
+        }
+        if (!firstChar) out.push([false, 3 * tf]);
+        firstChar = false;
+        for (let i = 0; i < p.length; i++) {
+          if (i) out.push([false, dit]);
+          out.push([true, p[i] === '.' ? dit : 3 * dit]);
+        }
+      }
+    }
+    return out;
+  }
+
+  // Schedule to samples: sine tone with raised cosine edges.
+  function render(sched, opts) {
+    const o = Object.assign({ sampleRate: 44100, tone: 600, riseMs: 5, lead: 0.15, tail: 0.15, amp: 0.7 }, opts || {});
+    const sr = o.sampleRate;
+    let total = o.lead + o.tail;
+    for (const s of sched) total += s[1];
+    const n = Math.ceil(total * sr);
+    const out = new Float32Array(n);
+    const w = 2 * Math.PI * o.tone / sr;
+    let t = o.lead;
+    for (const [on, d] of sched) {
+      const a = Math.round(t * sr);
+      const b = Math.round((t + d) * sr);
+      if (on) {
+        const len = b - a;
+        const rn = Math.max(1, Math.min(Math.round(o.riseMs / 1000 * sr), Math.floor(len / 2)));
+        for (let i = a; i < b && i < n; i++) {
+          const k = i - a;
+          const m = b - 1 - i;
+          let gain = 1;
+          if (k < rn) gain = 0.5 - 0.5 * Math.cos(Math.PI * (k + 0.5) / rn);
+          if (m < rn) gain = Math.min(gain, 0.5 - 0.5 * Math.cos(Math.PI * (m + 0.5) / rn));
+          out[i] = o.amp * gain * Math.sin(w * i);
+        }
+      }
+      t += d;
+    }
+    return out;
+  }
+
+  /* ---------- Test signal generator (jitter, noise) ---------- */
+  function makeRng(seed) {
+    let a = seed >>> 0;
+    const u = () => {
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const gauss = () => {
+      const u1 = Math.max(u(), 1e-12);
+      const u2 = u();
+      return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    };
+    return { u, gauss };
+  }
+
+  // snr in dB measured in a 500 Hz bandwidth. null means no noise.
+  function synthTest(text, o) {
+    o = Object.assign({ wpm: 20, tone: 600, sampleRate: 8000, jitter: 0, snr: null, seed: 1, lead: 0.7, tail: 0.7, amp: 0.5 }, o || {});
+    const rng = makeRng(o.seed);
+    const sched = schedule(text, o.wpm, o.wpm).map(([on, d]) => [on, d * (1 + o.jitter * (2 * rng.u() - 1))]);
+    const x = render(sched, { sampleRate: o.sampleRate, tone: o.tone, lead: o.lead, tail: o.tail, amp: o.amp });
+    if (o.snr !== null) {
+      const sigma = Math.sqrt((o.amp * o.amp / 2) / Math.pow(10, o.snr / 10) * (o.sampleRate / 2) / 500);
+      for (let i = 0; i < x.length; i++) x[i] += sigma * rng.gauss();
+    }
+    return x;
+  }
+
+  /* ---------- Decoder ---------- */
+  function decimate(x, sr) {
+    const m = Math.max(1, Math.round(sr / 8000));
+    if (m === 1) return { y: x, sr };
+    const n = Math.floor(x.length / m);
+    const y = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      let s = 0;
+      const o = i * m;
+      for (let k = 0; k < m; k++) s += x[o + k];
+      y[i] = s / m;
+    }
+    return { y, sr: sr / m };
+  }
+
+  function goertzel(x, start, len, f, sr) {
+    const coeff = 2 * Math.cos(2 * Math.PI * f / sr);
+    let s1 = 0;
+    let s2 = 0;
+    const end = start + len;
+    for (let i = start; i < end; i++) {
+      const s0 = x[i] + coeff * s1 - s2;
+      s2 = s1;
+      s1 = s0;
+    }
+    return s1 * s1 + s2 * s2 - coeff * s1 * s2;
+  }
+
+  // The keyed tone is the frequency whose 20 ms frame power varies the most over time.
+  // score = best variance / median variance. Near 1 to 3 for noise, much higher for Morse.
+  function findTone(x, sr, cfg) {
+    const maxN = Math.min(Math.floor(cfg.searchSeconds * sr), x.length);
+    const fl = Math.max(16, Math.floor(0.02 * sr));
+    const nf = Math.floor(maxN / fl);
+    if (nf < 4) return { f: (cfg.searchLo + cfg.searchHi) / 2, score: 0 };
+    const p = new Float64Array(nf);
+    const varAt = (f) => {
+      let m = 0;
+      for (let k = 0; k < nf; k++) { p[k] = goertzel(x, k * fl, fl, f, sr); m += p[k]; }
+      m /= nf;
+      let v = 0;
+      for (let k = 0; k < nf; k++) { const d = p[k] - m; v += d * d; }
+      return v / nf;
+    };
+    let bestF = cfg.searchLo;
+    let bestV = -1;
+    const all = [];
+    for (let f = cfg.searchLo; f <= cfg.searchHi; f += 10) {
+      const v = varAt(f);
+      all.push(v);
+      if (v > bestV) { bestV = v; bestF = f; }
+    }
+    all.sort((a, b) => a - b);
+    const med = Math.max(all[all.length >> 1] || 0, 1e-30);
+    let rf = bestF;
+    let rv = -1;
+    for (let f = Math.max(100, bestF - 12); f <= bestF + 12; f += 1) {
+      const v = varAt(f);
+      if (v > rv) { rv = v; rf = f; }
+    }
+    return { f: rf, score: rv / med };
+  }
+
+  // Lock-in detector: mix to baseband, boxcar filter, magnitude. One value per ~1 ms.
+  function envelope(x, sr, f0, tMs) {
+    const n = x.length;
+    const hop = Math.max(1, Math.round(sr * 0.001));
+    const hopMs = 1000 * hop / sr;
+    const l = Math.max(hop, Math.round(sr * tMs / 1000));
+    if (n < l + hop) return { env: new Float64Array(0), hopMs };
+    const w = 2 * Math.PI * f0 / sr;
+    const ci = new Float64Array(n + 1);
+    const cq = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) {
+      const ph = w * i;
+      const v = x[i];
+      ci[i + 1] = ci[i] + v * Math.cos(ph);
+      cq[i + 1] = cq[i] + v * Math.sin(ph);
+    }
+    const frames = Math.floor((n - l) / hop) + 1;
+    const env = new Float64Array(frames);
+    for (let k = 0; k < frames; k++) {
+      const s = k * hop;
+      const e = s + l;
+      const di = ci[e] - ci[s];
+      const dq = cq[e] - cq[s];
+      env[k] = Math.sqrt(di * di + dq * dq) / l;
+    }
+    return { env, hopMs };
+  }
+
+  // Envelope to alternating runs [keyDown, ms].
+  function segment(env, hopMs) {
+    if (env.length < 10) return [];
+    const sorted = Float64Array.from(env).sort();
+    const pct = (q) => sorted[Math.floor((sorted.length - 1) * q)];
+    let floor = pct(0.10);
+    let peak = pct(0.95);
+    let thr = 0.5 * (floor + peak);
+    for (let it = 0; it < 10; it++) {
+      let sl = 0, nl = 0, sh = 0, nh = 0;
+      for (let i = 0; i < env.length; i++) {
+        const e = env[i];
+        if (e < thr) { sl += e; nl++; } else { sh += e; nh++; }
+      }
+      if (!nl || !nh) break;
+      floor = sl / nl;
+      peak = sh / nh;
+      thr = 0.5 * (floor + peak);
+    }
+    const alpha = (hopMs / 1000) / 2;
+    let state = false;
+    let cur = 0;
+    const runs = [];
+    for (let i = 0; i < env.length; i++) {
+      const e = env[i];
+      const d = Math.max(peak - floor, 1e-12);
+      const hi = floor + 0.6 * d;
+      const lo = floor + 0.4 * d;
+      const next = state ? e >= lo : e > hi;
+      if (next !== state) { runs.push([state, cur]); state = next; cur = 0; }
+      cur += hopMs;
+      if (state && e > floor + 0.7 * d) peak += alpha * (e - peak);
+      else if (!state && e < floor + 0.3 * d) floor += alpha * (e - floor);
+    }
+    runs.push([state, cur]);
+    return runs;
+  }
+
+  // Swallow runs shorter than minMs, shortest first.
+  function cleanRuns(v, minMs) {
+    for (;;) {
+      let idx = -1;
+      let best = minMs;
+      for (let i = 0; i < v.length; i++) {
+        if (v[i][1] < best) { best = v[i][1]; idx = i; }
+      }
+      if (idx < 0) break;
+      if (v.length <= 1) { v = []; break; }
+      if (idx === 0) v.shift();
+      else if (idx === v.length - 1) v.pop();
+      else {
+        v[idx - 1][1] += v[idx][1] + v[idx + 1][1];
+        v.splice(idx, 2);
+      }
+    }
+    while (v.length && !v[0][0]) v.shift();
+    while (v.length && !v[v.length - 1][0]) v.pop();
+    return v;
+  }
+
+  const numSort = (a, b) => a - b;
+  const pctOf = (sorted, q) => sorted[Math.floor((sorted.length - 1) * q)];
+
+  // Dot length in ms: split mark lengths into short and long groups (2-means in log domain).
+  function estimateDot(marks, spaces) {
+    if (!marks.length) return 0;
+    const m = marks.slice().sort(numSort);
+    if (m.length < 3) return pctOf(m, 0.5);
+    const lg = m.map(Math.log);
+    let c1 = lg[Math.floor((lg.length - 1) * 0.1)];
+    let c2 = lg[Math.floor((lg.length - 1) * 0.9)];
+    let n1 = 0;
+    let n2 = 0;
+    for (let it = 0; it < 30; it++) {
+      let s1 = 0, a1 = 0, s2 = 0, a2 = 0;
+      for (const v of lg) {
+        if (Math.abs(v - c1) <= Math.abs(v - c2)) { s1 += v; a1++; } else { s2 += v; a2++; }
+      }
+      if (a1) c1 = s1 / a1;
+      if (a2) c2 = s2 / a2;
+      n1 = a1;
+      n2 = a2;
+    }
+    const d1 = Math.exp(c1);
+    const d2 = Math.exp(c2);
+    const r = d2 / d1;
+    if (n1 && n2 && r >= 2 && r <= 4.5) return (d1 * n1 + (d2 / 3) * n2) / (n1 + n2);
+    if (n1 && n2 && r > 4.5) return d1;
+    const mean = m.reduce((a, b) => a + b, 0) / m.length;
+    if (!spaces.length) return mean;
+    const s20 = pctOf(spaces.slice().sort(numSort), 0.2);
+    return mean > 2.2 * s20 ? mean / 3 : mean;
+  }
+
+  // Where the word gap starts, as a multiple of the dot length. Standard timing puts it
+  // near 5 dots. Farnsworth audio stretches the gaps, so learn it from the gaps themselves:
+  // letter gaps and word gaps form two groups about 7:3 apart.
+  function wordRatio(spaces, d) {
+    const g = spaces.filter((s) => s >= 2 * d).sort(numSort);
+    if (g.length < 4) return 5;
+    const lg = g.map(Math.log);
+    let c1 = lg[Math.floor((lg.length - 1) * 0.1)];
+    let c2 = lg[Math.floor((lg.length - 1) * 0.95)];
+    let n1 = 0;
+    let n2 = 0;
+    for (let it = 0; it < 30; it++) {
+      let s1 = 0, a1 = 0, s2 = 0, a2 = 0;
+      for (const v of lg) {
+        if (Math.abs(v - c1) <= Math.abs(v - c2)) { s1 += v; a1++; } else { s2 += v; a2++; }
+      }
+      if (a1) c1 = s1 / a1;
+      if (a2) c2 = s2 / a2;
+      n1 = a1;
+      n2 = a2;
+    }
+    const r = Math.exp(c2 - c1);
+    if (n1 && n2 && r >= 1.7 && r <= 3.6) return Math.exp((c1 + c2) / 2) / d;
+    const center = Math.exp(lg.reduce((a, b) => a + b, 0) / lg.length);
+    // One group of gaps. Near 5 to 9 dots they are word gaps; much longer means stretched letter gaps.
+    return center > 9 * d ? (center * 1.6) / d : 5;
+  }
+
+  // Runs to text. The dot length adapts as marks are classified.
+  function classify(runs, d0, wordK) {
+    let d = d0;
+    const lo = d0 / 3;
+    const hi = d0 * 3;
+    const clamp = (v) => Math.min(hi, Math.max(lo, v));
+    let out = '';
+    let pat = '';
+    const flush = () => { if (pat) { out += decodePattern(pat) || '?'; pat = ''; } };
+    for (const [on, dur] of runs) {
+      if (on) {
+        if (dur > 2 * d) { pat += '-'; d = clamp(0.85 * d + 0.15 * dur / 3); }
+        else { pat += '.'; d = clamp(0.85 * d + 0.15 * dur); }
+      } else if (dur >= 2 * d) {
+        flush();
+        if (dur >= (wordK || 5) * d) out += ' ';
+      }
+    }
+    flush();
+    return out.trim();
+  }
+
+  const splitRuns = (runs) => ({
+    marks: runs.filter((r) => r[0]).map((r) => r[1]),
+    spaces: runs.filter((r) => !r[0]).map((r) => r[1])
+  });
+
+  // samples: Float32Array mono. cfg.minScore gates out audio with no keyed tone.
+  function decode(samples, sampleRate, cfgIn) {
+    const cfg = Object.assign({ toneHz: null, searchLo: 300, searchHi: 1400, searchSeconds: 20, minScore: 0 }, cfgIn || {});
+    const res = { text: '', toneHz: 0, toneScore: 0, dotMs: 0, wpm: 0, marks: 0, seconds: samples.length / sampleRate, noSignal: false };
+    const { y: x, sr } = decimate(samples, sampleRate);
+    if (x.length < sr * 0.5) { res.noSignal = true; return res; }
+    let tone;
+    if (cfg.toneHz) { tone = cfg.toneHz; res.toneScore = Infinity; }
+    else { const t = findTone(x, sr, cfg); tone = t.f; res.toneScore = t.score; }
+    res.toneHz = tone;
+    if (res.toneScore < cfg.minScore) { res.noSignal = true; return res; }
+
+    let d = 0;
+    let tMs = 30;
+    let minMs = 20;
+    let finalRuns = [];
+    for (let pass = 0; pass < 3; pass++) {
+      const { env, hopMs } = envelope(x, sr, tone, tMs);
+      const runs = cleanRuns(segment(env, hopMs), minMs);
+      const { marks, spaces } = splitRuns(runs);
+      if (marks.length < 2) { res.noSignal = true; return res; }
+      const nd = estimateDot(marks, spaces);
+      if (nd <= 0) { res.noSignal = true; return res; }
+      const settled = d > 0 && Math.abs(nd - d) / d < 0.1;
+      d = nd;
+      finalRuns = runs;
+      if (settled) break;
+      tMs = Math.min(25, Math.max(4, d / 4));
+      minMs = Math.max(6, 0.5 * d);
+    }
+    const { spaces } = splitRuns(finalRuns);
+    res.text = classify(finalRuns, d, wordRatio(spaces, d));
+    // Marks read slightly short and element gaps slightly long, so average them for the speed readout.
+    const eg = spaces.filter((s) => s < 2 * d);
+    const dTrue = eg.length >= 3 ? (d + eg.reduce((a, b) => a + b, 0) / eg.length) / 2 : d;
+    res.dotMs = dTrue;
+    res.wpm = 1200 / dTrue;
+    res.marks = finalRuns.filter((r) => r[0]).length;
+    return res;
+  }
+
+  /* ---------- Cipher ---------- */
+  const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  function caesarMap(shift) {
+    const n = ((Math.trunc(shift) % 26) + 26) % 26;
+    return Array.from(ALPHA).map((c, i) => ALPHA[(i + n) % 26]).join('');
+  }
+
+  // Keyword alphabet: keyword letters first, then the rest in order.
+  function keywordMap(keyword) {
+    const seen = new Set();
+    let m = '';
+    for (const c of (String(keyword).toUpperCase() + ALPHA)) {
+      if (c >= 'A' && c <= 'Z' && !seen.has(c)) { seen.add(c); m += c; }
+    }
+    return m;
+  }
+
+  // A custom alphabet must use each of the 26 letters exactly once.
+  function validMap(text) {
+    const m = String(text).toUpperCase().replace(/[^A-Z]/g, '');
+    return m.length === 26 && new Set(m).size === 26 ? m : null;
+  }
+
+  // spec: { map: '26 letters', digitShift: 0..9 }
+  function enc(text, spec) {
+    const map = spec.map;
+    const ds = spec.digitShift || 0;
+    let out = '';
+    for (const ch of text.toUpperCase()) {
+      if (ch >= 'A' && ch <= 'Z') out += map[ch.charCodeAt(0) - 65];
+      else if (ch >= '0' && ch <= '9') out += String((ch.charCodeAt(0) - 48 + ds) % 10);
+      else out += ch;
+    }
+    return out;
+  }
+
+  function dec(text, spec) {
+    const inv = new Array(26);
+    for (let i = 0; i < 26; i++) inv[spec.map.charCodeAt(i) - 65] = ALPHA[i];
+    const ds = spec.digitShift || 0;
+    let out = '';
+    for (const ch of text.toUpperCase()) {
+      if (ch >= 'A' && ch <= 'Z') out += inv[ch.charCodeAt(0) - 65];
+      else if (ch >= '0' && ch <= '9') out += String((ch.charCodeAt(0) - 48 - ds + 10) % 10);
+      else out += ch;
+    }
+    return out;
+  }
+
+  /* ---------- Auto Shift (daily cipher) ---------- */
+  // Rule: first letter of the month (A=1) + day of the month - weekday number (Mon=1 ... Sun=7).
+  // The result wraps around the 26 letter alphabet. Dates use the Pacific calendar.
+  const MONTH_LETTERS = 'JFMAMJJASOND';
+  const DOW_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  // Calendar date in Pacific time right now as { y, m, d }. Falls back to the device date if zone data is missing.
+  function pacificToday(now) {
+    const t = now instanceof Date ? now : new Date();
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(t);
+      const get = (k) => +parts.find((p) => p.type === k).value;
+      return { y: get('year'), m: get('month'), d: get('day'), zone: 'Pacific' };
+    } catch (e) {
+      return { y: t.getFullYear(), m: t.getMonth() + 1, d: t.getDate(), zone: 'device' };
+    }
+  }
+
+  function autoShift(y, m, d) {
+    const letter = MONTH_LETTERS[m - 1];
+    const letterValue = letter.charCodeAt(0) - 64;
+    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
+    const raw = letterValue + d - dow;
+    const shift = ((raw % 26) + 26) % 26;
+    return { letter, letterValue, day: d, dow, raw, shift, dowName: DOW_NAMES[dow - 1], monthName: MONTH_NAMES[m - 1] };
+  }
+
+  /* ---------- Koch trainer logic ---------- */
+  const KOCH = 'KMURESNAPTLWI.JZ=FOY,VG5/Q92H38B?47C1D60X';
+  const kochActive = (level) => KOCH.slice(0, Math.max(2, Math.min(level, KOCH.length)));
+
+  function kochGroup(level, rnd, len) {
+    len = len || 5;
+    const act = Array.from(kochActive(level));
+    const newest = act[act.length - 1];
+    const out = [];
+    for (let i = 0; i < len; i++) {
+      out.push(rnd() < 0.3 ? newest : act[Math.floor(rnd() * act.length)]);
+    }
+    if (!out.includes(newest)) out[Math.floor(rnd() * len)] = newest;
+    return out.join('');
+  }
+
+  // Per position: true if typed matches expected.
+  function scoreGroup(expected, typed) {
+    const t = typed.toUpperCase().replace(/\s/g, '');
+    return Array.from(expected).map((c, i) => t[i] === c);
+  }
+
+  const api = {
+    MORSE, encodeChar, decodePattern, toMorseString,
+    timing, schedule, render, makeRng, synthTest,
+    decode, findTone,
+    caesarMap, keywordMap, validMap, enc, dec, ALPHA,
+    pacificToday, autoShift,
+    KOCH, kochActive, kochGroup, scoreGroup
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else g.MorseCore = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
+<script>
+(function () {
+  'use strict';
+  if (!window.MorseCore) throw new Error('the decoder script did not load');
+  var M = window.MorseCore;
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function setOut(node, text, emptyText) {
+    node.textContent = text || emptyText || '';
+    node.classList.toggle('empty', !text);
+  }
+
+  /* ---------- Audio playback ---------- */
+  var actx = null;
+  var playing = null;
+  function ac() {
+    if (!actx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      actx = new AC();
+    }
+    if (actx.state === 'suspended' && actx.resume) actx.resume();
+    return actx;
+  }
+  function stopPlayback() {
+    if (playing) {
+      var s = playing.src;
+      var cb = playing.onStop;
+      playing = null;
+      try { s.onended = null; s.stop(); } catch (e) { /* already stopped */ }
+      if (cb) cb();
+    }
+  }
+  function playText(text, wpm, eff, tone, onStart, onStop) {
+    var sched = M.schedule(text, wpm, eff);
+    if (!sched.length) return false;
+    stopPlayback();
+    var c = ac();
+    var samples = M.render(sched, { sampleRate: c.sampleRate, tone: tone });
+    var buf = c.createBuffer(1, samples.length, c.sampleRate);
+    buf.copyToChannel(samples, 0);
+    var src = c.createBufferSource();
+    src.buffer = buf;
+    src.connect(c.destination);
+    var entry = { src: src, onStop: onStop };
+    src.onended = function () {
+      if (playing === entry) { playing = null; if (onStop) onStop(); }
+    };
+    playing = entry;
+    src.start();
+    if (onStart) onStart();
+    return true;
+  }
+
+  /* ---------- Copy ---------- */
+  function flash(btn, msg) {
+    var old = btn.getAttribute('data-label') || btn.textContent;
+    btn.setAttribute('data-label', old);
+    btn.textContent = msg;
+    setTimeout(function () { btn.textContent = old; }, 1400);
+  }
+  function copyText(text, btn) {
+    if (!text) { flash(btn, 'Nothing to copy'); return; }
+    var fallback = function () {
+      var ta = el('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      flash(btn, ok ? 'Copied' : 'Select the text to copy');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash(btn, 'Copied'); }, fallback);
+    } else fallback();
+  }
+
+  /* ---------- Speed controls ---------- */
+  function buildSpeed(box, id, d) {
+    var inputs = {};
+    function field(key, label, min, max, val, unit) {
+      var f = el('div', 'field');
+      var l = el('label');
+      l.htmlFor = id + '-' + key;
+      l.appendChild(document.createTextNode(label + ': '));
+      var o = el('output');
+      l.appendChild(o);
+      var inp = document.createElement('input');
+      inp.type = 'range';
+      inp.id = id + '-' + key;
+      inp.min = min; inp.max = max; inp.step = 1; inp.value = val;
+      f.appendChild(l);
+      f.appendChild(inp);
+      box.appendChild(f);
+      inputs[key] = { inp: inp, out: o, unit: unit };
+    }
+    field('wpm', 'Character speed', 10, 35, d.wpm, 'WPM');
+    field('eff', 'Effective speed', 5, 35, d.eff, 'WPM');
+    field('tone', 'Pitch', 400, 1000, d.tone, 'Hz');
+    function refresh() {
+      var w = +inputs.wpm.inp.value;
+      var e = +inputs.eff.inp.value;
+      inputs.wpm.out.textContent = w + ' WPM';
+      inputs.eff.out.textContent = (e > w ? w + ' WPM (capped)' : e + ' WPM');
+      inputs.tone.out.textContent = inputs.tone.inp.value + ' Hz';
+    }
+    box.addEventListener('input', refresh);
+    refresh();
+    return {
+      wpm: function () { return +inputs.wpm.inp.value; },
+      eff: function () { return Math.min(+inputs.eff.inp.value, +inputs.wpm.inp.value); },
+      tone: function () { return +inputs.tone.inp.value; }
+    };
+  }
+
+  /* ---------- Mode, disclaimer, cipher ---------- */
+  var mode = 'plain';
+  var last = { live: '', file: '' };
+  var DISCLAIMER = 'Encoded messages must not be transmitted over amateur, CB, GMRS or FRS radio. FCC rules (47 CFR 97.113(a)(4), 95.1733) prohibit messages encoded to obscure their meaning. Use encoded mode only over the internet, phone, or offline.';
+
+  function showDialog(title, body, withCancel, onOk) {
+    $('dlg-title').textContent = title;
+    $('dlg-body').textContent = body;
+    $('dlg-cancel').hidden = !withCancel;
+    var dlg = $('dlg');
+    dlg.hidden = false;
+    $('dlg-ok').onclick = function () { dlg.hidden = true; if (onOk) onOk(); };
+    $('dlg-cancel').onclick = function () { dlg.hidden = true; };
+    $('dlg-ok').focus();
+  }
+
+  // Auto Shift: month letter + date - weekday number, on the Pacific calendar unless a date is picked.
+  var lastAutoKey = '';
+  function autoInfo() {
+    var v = $('auto-date').value;
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    var y, mo, d, custom = false, zone = 'Pacific';
+    if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; custom = true; }
+    else { var p = M.pacificToday(); y = p.y; mo = p.m; d = p.d; zone = p.zone; }
+    var a = M.autoShift(y, mo, d);
+    return { a: a, y: y, custom: custom, zone: zone, key: y + '-' + mo + '-' + d };
+  }
+
+  function cipherSpec() {
+    var kind = $('cipher-kind').value;
+    var map = null;
+    var ds = 0;
+    var shift = +$('cipher-shift').value;
+    if (kind === 'caesar') {
+      map = M.caesarMap(shift);
+      if ($('cipher-digits').checked) ds = shift % 10;
+    } else if (kind === 'auto') {
+      var ai = autoInfo();
+      map = M.caesarMap(ai.a.shift);
+      if ($('auto-digits').checked) ds = ai.a.shift % 10;
+    } else if (kind === 'keyword') {
+      var kw = $('cipher-keyword').value.replace(/[^A-Za-z]/g, '');
+      map = kw ? M.keywordMap(kw) : null;
+    } else {
+      map = M.validMap($('cipher-custom').value);
+    }
+    return map ? { map: map, digitShift: ds } : null;
+  }
+
+  function refreshCipher() {
+    var kind = $('cipher-kind').value;
+    $('cf-caesar').hidden = kind !== 'caesar';
+    $('cf-auto').hidden = kind !== 'auto';
+    if (kind === 'auto') {
+      var ai = autoInfo();
+      var a = ai.a;
+      $('auto-day').textContent = (ai.custom ? 'Chosen date' : 'Today, ' + ai.zone + ' time') + ': ' + a.dowName + ', ' + a.monthName + ' ' + a.day;
+      var calc = a.letter + ' (' + a.letterValue + ') + ' + a.day + ' - ' + a.dow + ' = ' + a.raw;
+      if (a.raw !== a.shift) calc += ', wraps to ' + a.shift;
+      $('auto-calc').textContent = calc + '\nShift ' + a.shift;
+      var note = $('auto-note');
+      note.hidden = a.shift !== 0;
+      note.textContent = a.shift === 0 ? 'The shift is 0 on this date, so letters do not change.' : '';
+      lastAutoKey = ai.custom ? '' : ai.key;
+    } else lastAutoKey = '';
+    $('cf-keyword').hidden = kind !== 'keyword';
+    $('cf-custom').hidden = kind !== 'custom';
+    $('shift-val').textContent = $('cipher-shift').value;
+    var spec = cipherSpec();
+    var err = $('cipher-err');
+    if (!spec) {
+      err.hidden = false;
+      err.textContent = kind === 'keyword' ? 'Type a keyword with at least one letter.' : 'Use all 26 letters, each exactly once.';
+      $('map-row').textContent = '';
+    } else {
+      err.hidden = true;
+      $('map-row').textContent = spec.map;
+    }
+    refreshAll();
+  }
+
+  function showDeciphered(raw, wrapId, outId) {
+    var wrap = $(wrapId);
+    if (mode !== 'encoded') { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    var spec = cipherSpec();
+    $(outId).textContent = spec ? (M.dec(raw, spec) || '') : 'Fix the cipher settings first.';
+  }
+
+  function sendPayload() {
+    var raw = $('send-text').value;
+    if (mode !== 'encoded') return raw;
+    var spec = cipherSpec();
+    return spec ? M.enc(raw, spec) : '';
+  }
+
+  function updateSend() {
+    var payload = sendPayload();
+    if (mode === 'encoded') {
+      $('send-enc').textContent = cipherSpec() ? payload : 'Fix the cipher settings first.';
+    }
+    var m = M.toMorseString(payload);
+    setOut($('send-morse'), m, 'Nothing to send yet.');
+  }
+
+  function refreshAll() {
+    $('send-enc-wrap').hidden = mode !== 'encoded';
+    $('hand-card').hidden = mode !== 'encoded';
+    updateSend();
+    showDeciphered(last.live, 'live-dec-wrap', 'live-dec');
+    showDeciphered(last.file, 'file-dec-wrap', 'file-dec');
+  }
+
+  function setMode(m) {
+    mode = m;
+    $('mode-plain').classList.toggle('on', m === 'plain');
+    $('mode-enc').classList.toggle('on', m === 'encoded');
+    $('mode-plain').setAttribute('aria-pressed', String(m === 'plain'));
+    $('mode-enc').setAttribute('aria-pressed', String(m === 'encoded'));
+    $('cipher-card').hidden = m !== 'encoded';
+    if (m === 'encoded') refreshCipher(); else refreshAll();
+  }
+
+  $('mode-plain').addEventListener('click', function () { setMode('plain'); });
+  $('mode-enc').addEventListener('click', function () {
+    if (mode === 'encoded') return;
+    showDialog('Encoded mode', DISCLAIMER, true, function () { setMode('encoded'); });
+  });
+  ['cipher-kind', 'cipher-shift', 'cipher-digits', 'cipher-keyword', 'cipher-custom', 'auto-date', 'auto-digits'].forEach(function (id) {
+    $(id).addEventListener('input', refreshCipher);
+    $(id).addEventListener('change', refreshCipher);
+  });
+  $('auto-today').addEventListener('click', function () { $('auto-date').value = ''; refreshCipher(); });
+  // Pacific midnight can pass while the page is open, so re-check once a minute.
+  setInterval(function () {
+    if (mode !== 'encoded' || $('cipher-kind').value !== 'auto' || !lastAutoKey) return;
+    if (autoInfo().key !== lastAutoKey) refreshCipher();
+  }, 30000);
+  $('send-text').addEventListener('input', updateSend);
+
+  $('hand-enc').addEventListener('click', function () {
+    var spec = cipherSpec();
+    setOut($('hand-out'), spec ? M.enc($('hand-in').value, spec) : '', spec ? 'Nothing to encipher yet.' : 'Fix the cipher settings first.');
+  });
+  $('hand-dec').addEventListener('click', function () {
+    var spec = cipherSpec();
+    setOut($('hand-out'), spec ? M.dec($('hand-in').value, spec) : '', spec ? 'Nothing to decipher yet.' : 'Fix the cipher settings first.');
+  });
+
+  /* ---------- Tabs ---------- */
+  function showTab(name) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
+      b.setAttribute('aria-selected', String(b.getAttribute('data-tab') === name));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-panel]'), function (p) {
+      p.hidden = p.getAttribute('data-panel') !== name;
+    });
+    if (name !== 'listen' && live.on) stopLive();
+    stopPlayback();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
+    b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); });
+  });
+
+  /* ---------- Result display ---------- */
+  function statsLine(box, r) {
+    box.textContent = '';
+    var parts = [];
+    if (r.toneHz) parts.push('Tone ' + Math.round(r.toneHz) + ' Hz');
+    if (r.wpm) parts.push('about ' + Math.round(r.wpm) + ' WPM');
+    if (r.marks) parts.push(r.marks + ' marks');
+    if (r.seconds) parts.push(r.seconds.toFixed(1) + ' s of audio');
+    if (!parts.length) parts.push('No result');
+    parts.forEach(function (p) { box.appendChild(el('span', null, p)); });
+  }
+  var NO_SIGNAL = 'No Morse tone found. Try a louder or cleaner recording, or enter the tone pitch.';
+
+  /* ---------- Live decode ---------- */
+  var live = { on: false, stream: null, ctx: null, proc: null, src: null, mute: null, chunks: [], total: 0, sr: 0, timer: null, busy: false, wake: null };
+
+  function micEnv() {
+    var framed = false;
+    try { framed = window.self !== window.top; } catch (x) { framed = true; }
+    var ua = navigator.userAgent || '';
+    return {
+      framed: framed,
+      webview: /; wv\)/.test(ua) || (/(iPhone|iPad|iPod)/.test(ua) && !/Safari/.test(ua)),
+      secure: window.isSecureContext === true,
+      api: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+      proto: (location.protocol || '').replace(':', '') || 'unknown'
+    };
+  }
+
+  function micBlocked(e) {
+    var box = $('mic-msg');
+    box.hidden = false;
+    var env = micEnv();
+    var n = e && e.name ? e.name : '';
+    var lead;
+    if (env.framed || env.webview) {
+      lead = 'This page is open inside another app, and apps block the microphone for pages. Save the file, then open it from your Files app in Chrome or Safari.';
+    } else if (!env.secure || !env.api) {
+      lead = 'This browser only allows the microphone on secure pages. Open the page from an https address, or open the saved file straight in Chrome.';
+    } else if ((n === 'NotAllowedError' || n === 'SecurityError') && env.proto !== 'https' && env.proto !== 'http') {
+      lead = 'Your browser refused the microphone for a saved file and never showed its permission prompt. The page has to be opened from an https address for the prompt to appear.';
+    } else if (n === 'NotAllowedError' || n === 'SecurityError') {
+      lead = 'Microphone permission is off. Tap the icon beside the address bar, open Permissions, and allow Microphone, then reload. Also check phone Settings, Apps, your browser, Permissions, Microphone.';
+    } else if (n === 'NotFoundError') {
+      lead = 'No microphone was found on this device.';
+    } else if (n === 'NotReadableError') {
+      lead = 'Another app is using the microphone. Close it and try again.';
+    } else {
+      lead = 'The microphone could not start.';
+    }
+    box.textContent = lead + ' You can still use "Record and decode" below, or decode a recording in the File tab.';
+    var d = $('mic-diag');
+    d.hidden = false;
+    var base = 'Details: page ' + env.proto + ', secure ' + (env.secure ? 'yes' : 'no') + ', inside app ' + ((env.framed || env.webview) ? 'yes' : 'no') + ', error ' + (n || 'none');
+    d.textContent = base;
+    try {
+      navigator.permissions.query({ name: 'microphone' }).then(function (st) { d.textContent = base + ', mic setting ' + st.state; }, function () { /* not supported */ });
+    } catch (x) { /* not supported */ }
+  }
+
+  function liveTail(seconds) {
+    var need = Math.min(Math.floor(seconds * live.sr), live.total);
+    var out = new Float32Array(need);
+    var pos = need;
+    for (var i = live.chunks.length - 1; i >= 0 && pos > 0; i--) {
+      var c = live.chunks[i];
+      var take = Math.min(c.length, pos);
+      out.set(c.subarray(c.length - take), pos - take);
+      pos -= take;
+    }
+    return out;
+  }
+
+  function showLive(r, finalPass) {
+    statsLine($('live-stats'), r);
+    if (r.noSignal || !r.text) {
+      setOut($('live-out'), '', finalPass ? NO_SIGNAL : 'Listening. No Morse tone heard yet.');
+      last.live = '';
+    } else {
+      setOut($('live-out'), r.text);
+      last.live = r.text;
+    }
+    showDeciphered(last.live, 'live-dec-wrap', 'live-dec');
+  }
+
+  function liveTick() {
+    if (!live.on || live.busy || live.total < live.sr * 2) return;
+    live.busy = true;
+    try {
+      showLive(M.decode(liveTail(25), live.sr, { minScore: 5, searchSeconds: 25 }), false);
+    } finally { live.busy = false; }
+  }
+
+  function setLevel(rms) {
+    $('level').style.width = Math.min(100, Math.round(Math.sqrt(rms) * 160)) + '%';
+  }
+
+  function startLive() {
+    $('mic-msg').hidden = true;
+    $('mic-diag').hidden = true;
+    var md = navigator.mediaDevices;
+    if (!md || !md.getUserMedia) { micBlocked({ name: 'unsupported' }); return; }
+    // Raw audio first (no echo cancel, no noise cut, no auto gain), plain audio if the phone refuses those settings.
+    md.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } }).catch(function (e) {
+      if (e && (e.name === 'OverconstrainedError' || e.name === 'TypeError')) return md.getUserMedia({ audio: true });
+      throw e;
+    }).then(function (stream) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      live.stream = stream;
+      live.ctx = new AC();
+      if (live.ctx.resume) live.ctx.resume();
+      live.sr = live.ctx.sampleRate;
+      live.chunks = [];
+      live.total = 0;
+      live.src = live.ctx.createMediaStreamSource(stream);
+      live.proc = live.ctx.createScriptProcessor(4096, 1, 1);
+      live.mute = live.ctx.createGain();
+      live.mute.gain.value = 0;
+      live.src.connect(live.proc);
+      live.proc.connect(live.mute);
+      live.mute.connect(live.ctx.destination);
+      var maxN = live.sr * 120;
+      live.proc.onaudioprocess = function (e) {
+        var d = e.inputBuffer.getChannelData(0);
+        live.chunks.push(new Float32Array(d));
+        live.total += d.length;
+        while (live.total > maxN && live.chunks.length > 1) live.total -= live.chunks.shift().length;
+        var s = 0;
+        for (var i = 0; i < d.length; i++) s += d[i] * d[i];
+        setLevel(Math.sqrt(s / d.length));
+      };
+      live.on = true;
+      live.timer = setInterval(liveTick, 900);
+      $('live-btn').textContent = 'Stop listening';
+      setOut($('live-out'), '', 'Listening. No Morse tone heard yet.');
+      $('live-stats').textContent = '';
+      $('live-stats').appendChild(el('span', null, 'Listening at ' + live.sr + ' Hz'));
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        navigator.wakeLock.request('screen').then(function (w) { live.wake = w; }, function () { /* optional */ });
+      }
+    }).catch(function (e) {
+      if (live.stream && !live.on) { live.stream.getTracks().forEach(function (t) { t.stop(); }); live.stream = null; }
+      micBlocked(e);
+    });
+  }
+
+  function stopLive() {
+    if (!live.on) return;
+    live.on = false;
+    clearInterval(live.timer);
+    try { live.proc.onaudioprocess = null; live.src.disconnect(); live.proc.disconnect(); live.mute.disconnect(); } catch (e) { /* closing */ }
+    if (live.stream) live.stream.getTracks().forEach(function (t) { t.stop(); });
+    if (live.ctx && live.ctx.close) live.ctx.close();
+    if (live.wake && live.wake.release) { live.wake.release(); live.wake = null; }
+    $('level').style.width = '0%';
+    $('live-btn').textContent = 'Start listening';
+    if (live.total > live.sr * 1) {
+      var all = liveTail(120);
+      showLive(M.decode(all, live.sr, { minScore: 5, searchSeconds: 25 }), true);
+    }
+  }
+
+  $('live-btn').addEventListener('click', function () { if (live.on) stopLive(); else startLive(); });
+  $('live-copy').addEventListener('click', function () { copyText(last.live, $('live-copy')); });
+  window.addEventListener('pagehide', function () { stopLive(); });
+
+  /* ---------- File decode ---------- */
+  var fileData = null;
+
+  function decodeAudioBlob(file) {
+    return file.arrayBuffer().then(function (buf) {
+      var OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      var ctx;
+      try { ctx = new OAC(1, 1, 16000); } catch (e) { ctx = new OAC(1, 1, 44100); }
+      return new Promise(function (resolve, reject) {
+        var p = ctx.decodeAudioData(buf, resolve, reject);
+        if (p && p.catch) p.catch(reject);
+      });
+    }).then(function (audio) {
+      var n = audio.length;
+      var mono = new Float32Array(n);
+      for (var c = 0; c < audio.numberOfChannels; c++) {
+        var d = audio.getChannelData(c);
+        for (var i = 0; i < n; i++) mono[i] += d[i] / audio.numberOfChannels;
+      }
+      return { samples: mono, sr: audio.sampleRate };
+    });
+  }
+
+  function runFileDecode() {
+    if (!fileData) return;
+    $('file-redo').disabled = true;
+    setOut($('file-out'), '', 'Decoding...');
+    setTimeout(function () {
+      var tone = parseFloat($('file-tone').value);
+      var r = M.decode(fileData.samples, fileData.sr, { minScore: 4, toneHz: tone > 0 ? tone : null, searchSeconds: 30 });
+      statsLine($('file-stats'), r);
+      if (r.noSignal || !r.text) { setOut($('file-out'), '', NO_SIGNAL); last.file = ''; }
+      else { setOut($('file-out'), r.text); last.file = r.text; }
+      showDeciphered(last.file, 'file-dec-wrap', 'file-dec');
+      $('file-redo').disabled = false;
+    }, 40);
+  }
+
+  function loadAudioFile(file, statsEl, onReady) {
+    statsEl.textContent = '';
+    statsEl.appendChild(el('span', null, 'Reading ' + file.name + '...'));
+    decodeAudioBlob(file).then(function (data) {
+      fileData = data;
+      onReady();
+    }, function () {
+      statsEl.textContent = '';
+      statsEl.appendChild(el('span', null, 'Could not read that file. Try MP3, WAV or M4A.'));
+      setOut($('file-out'), '', 'This file could not be decoded as audio.');
+    });
+  }
+
+  $('file-input').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    loadAudioFile(f, $('file-stats'), runFileDecode);
+  });
+  $('file-redo').addEventListener('click', runFileDecode);
+  $('file-copy').addEventListener('click', function () { copyText(last.file, $('file-copy')); });
+
+  $('rec-input').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    showTab('file');
+    loadAudioFile(f, $('file-stats'), runFileDecode);
+  });
+
+  /* ---------- Send ---------- */
+  var sendSpeed = buildSpeed($('send-speed'), 'send', { wpm: 20, eff: 15, tone: 600 });
+  $('send-play').addEventListener('click', function () {
+    var btn = $('send-play');
+    if (btn.getAttribute('data-playing') === '1') { stopPlayback(); return; }
+    var ok = playText(sendPayload(), sendSpeed.wpm(), sendSpeed.eff(), sendSpeed.tone(), function () {
+      btn.textContent = 'Stop';
+      btn.setAttribute('data-playing', '1');
+    }, function () {
+      btn.textContent = 'Play';
+      btn.removeAttribute('data-playing');
+    });
+    if (!ok) flash(btn, 'Nothing to play');
+  });
+  $('send-copy').addEventListener('click', function () { copyText(M.toMorseString(sendPayload()), $('send-copy')); });
+
+  /* ---------- Koch trainer ---------- */
+  var KEY = 'mcl.koch.v1';
+  var koch = { level: 2, win: [], stats: {}, group: '' };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (saved && typeof saved.level === 'number') {
+      koch.level = Math.max(2, Math.min(M.KOCH.length, saved.level));
+      koch.win = Array.isArray(saved.win) ? saved.win.slice(-50) : [];
+      koch.stats = saved.stats && typeof saved.stats === 'object' ? saved.stats : {};
+    }
+  } catch (e) { /* storage unavailable, start fresh */ }
+  function saveKoch() {
+    try { localStorage.setItem(KEY, JSON.stringify({ level: koch.level, win: koch.win, stats: koch.stats })); } catch (e) { /* optional */ }
+  }
+
+  var kochSpeed = buildSpeed($('koch-speed'), 'koch', { wpm: 20, eff: 10, tone: 600 });
+  var rnd = M.makeRng(Date.now() & 0xffffffff).u;
+
+  function renderKoch() {
+    var act = M.kochActive(koch.level);
+    $('koch-chars').textContent = Array.from(act).join(' ');
+    var weak = Object.keys(koch.stats).filter(function (c) { return koch.stats[c].n >= 5; })
+      .sort(function (a, b) { return koch.stats[a].ok / koch.stats[a].n - koch.stats[b].ok / koch.stats[b].n; })
+      .slice(0, 3).filter(function (c) { return koch.stats[c].ok / koch.stats[c].n < 0.9; });
+    var info = $('koch-info');
+    info.textContent = '';
+    info.appendChild(el('span', null, 'Level ' + koch.level + ' of ' + M.KOCH.length));
+    if (weak.length) info.appendChild(el('span', null, 'Weakest: ' + weak.join(' ')));
+    var keys = $('koch-keys');
+    keys.textContent = '';
+    Array.from(act).forEach(function (c) {
+      var b = el('button', 'key', c);
+      b.type = 'button';
+      b.addEventListener('click', function () {
+        var inp = $('koch-answer');
+        if (inp.value.length < 8) inp.value += c;
+      });
+      keys.appendChild(b);
+    });
+    var n = koch.win.length;
+    var okc = koch.win.reduce(function (a, b) { return a + b; }, 0);
+    var pct = n ? Math.round(100 * okc / n) : 0;
+    $('koch-bar').style.width = Math.min(100, Math.round(100 * n / 50)) + '%';
+    $('koch-prog').textContent = '';
+    $('koch-prog').appendChild(el('span', null, n + ' of 50 characters counted'));
+    $('koch-prog').appendChild(el('span', null, 'Accuracy ' + (n ? pct + '%' : 'none yet') + ', need 90%'));
+  }
+
+  function kochPlay(newGroup) {
+    if (newGroup || !koch.group) {
+      koch.group = M.kochGroup(koch.level, rnd, 5);
+      $('koch-answer').value = '';
+      setOut($('koch-result'), '', 'Listening. Type what you hear, then check.');
+    }
+    $('koch-replay').disabled = false;
+    playText(koch.group, kochSpeed.wpm(), kochSpeed.eff(), kochSpeed.tone());
+  }
+
+  function kochCheck() {
+    var out = $('koch-result');
+    if (!koch.group) { setOut(out, '', 'Play a group first.'); return; }
+    var typed = $('koch-answer').value.toUpperCase().replace(/\s/g, '');
+    if (!typed) { setOut(out, '', 'Type what you heard, then check.'); return; }
+    var res = M.scoreGroup(koch.group, typed);
+    out.classList.remove('empty');
+    out.textContent = '';
+    out.appendChild(el('div', null, 'Sent'));
+    var line = el('div');
+    Array.from(koch.group).forEach(function (c, i) { line.appendChild(el('span', res[i] ? 'good' : 'bad', c)); });
+    out.appendChild(line);
+    out.appendChild(el('div', null, 'You typed ' + typed));
+    res.forEach(function (ok, i) {
+      var c = koch.group[i];
+      var s = koch.stats[c] || { n: 0, ok: 0 };
+      s.n += 1;
+      s.ok += ok ? 1 : 0;
+      koch.stats[c] = s;
+      koch.win.push(ok ? 1 : 0);
+    });
+    if (koch.win.length > 50) koch.win = koch.win.slice(-50);
+    var okc = koch.win.reduce(function (a, b) { return a + b; }, 0);
+    if (koch.win.length >= 50 && okc / koch.win.length >= 0.9 && koch.level < M.KOCH.length) {
+      koch.level += 1;
+      koch.win = [];
+      var nc = M.KOCH[koch.level - 1];
+      var up = el('div', 'good', 'Unlocked ' + nc + '. Level ' + koch.level + '.');
+      out.appendChild(up);
+    }
+    koch.group = '';
+    $('koch-replay').disabled = true;
+    saveKoch();
+    renderKoch();
+  }
+
+  $('koch-play').addEventListener('click', function () { kochPlay(true); });
+  $('koch-replay').addEventListener('click', function () { kochPlay(false); });
+  $('koch-check').addEventListener('click', kochCheck);
+  $('koch-answer').addEventListener('keydown', function (e) { if (e.key === 'Enter') kochCheck(); });
+  $('koch-del').addEventListener('click', function () {
+    var inp = $('koch-answer');
+    inp.value = inp.value.slice(0, -1);
+  });
+  var resetArmed = false;
+  $('koch-reset').addEventListener('click', function () {
+    var b = $('koch-reset');
+    if (!resetArmed) {
+      resetArmed = true;
+      b.textContent = 'Tap again to erase progress';
+      setTimeout(function () { resetArmed = false; b.textContent = 'Reset progress'; }, 3000);
+      return;
+    }
+    resetArmed = false;
+    b.textContent = 'Reset progress';
+    koch = { level: 2, win: [], stats: {}, group: '' };
+    $('koch-answer').value = '';
+    setOut($('koch-result'), '', 'Progress reset. Play a group to start.');
+    saveKoch();
+    renderKoch();
+  });
+
+  /* ---------- Reference chart ---------- */
+  M.MORSE.forEach(function (row) {
+    var b = el('button', 'cbtn');
+    b.type = 'button';
+    b.appendChild(el('b', null, row[0]));
+    b.appendChild(el('span', null, row[1]));
+    b.setAttribute('aria-label', row[0] + ' ' + row[1]);
+    b.addEventListener('click', function () { playText(row[0], 15, 15, 600); });
+    $('chart').appendChild(b);
+  });
+
+  /* ---------- Start ---------- */
+  renderKoch();
+  updateSend();
+  showDialog('Before you start', DISCLAIMER, false, null);
+  $('boot').hidden = true; // only reached when startup finished without an error
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* offline use is optional */ }); });
+}
+</script>
+</body>
+</html>
