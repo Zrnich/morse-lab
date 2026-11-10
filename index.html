@@ -102,6 +102,7 @@ output { font-family: var(--mono); font-weight: 500; }
 .meter > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.12s linear; }
 .note { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); border-radius: 8px; padding: 12px; font-size: 14px; }
 .err { margin: 0; color: var(--bad); font-size: 14px; }
+audio { width: 100%; }
 .speed { display: grid; gap: 12px; }
 .speed > .btn { justify-self: start; }
 .map { font: 500 14px/1.6 var(--mono); letter-spacing: 0.12em; overflow-wrap: anywhere; }
@@ -280,6 +281,25 @@ output { font-family: var(--mono); font-weight: 500; }
         <div class="row">
           <button type="button" class="btn primary" id="send-play">Play</button>
           <button type="button" class="btn" id="send-copy">Copy Morse</button>
+        </div>
+      </div>
+      <div class="card" id="export-card">
+        <h2>Save as audio</h2>
+        <p class="hint" id="exp-hint">Uses the speed and pitch above.</p>
+        <div class="stats" id="exp-len"></div>
+        <div class="row">
+          <button type="button" class="btn primary" id="exp-mp3">Make MP3</button>
+          <button type="button" class="btn" id="exp-wav">Make WAV</button>
+        </div>
+        <div class="note" id="exp-msg" hidden></div>
+        <div id="exp-result" hidden>
+          <div class="lbl">Ready to send</div>
+          <audio id="exp-audio" controls></audio>
+          <div class="stats" id="exp-info"></div>
+          <div class="row">
+            <button type="button" class="btn primary" id="exp-share" hidden>Share</button>
+            <button type="button" class="btn" id="exp-save">Save to device</button>
+          </div>
         </div>
       </div>
       <div class="card" id="hand-card" hidden>
@@ -986,6 +1006,7 @@ output { font-family: var(--mono); font-weight: 500; }
     resetBtn.addEventListener('click', function () {
       ['wpm', 'eff', 'tone'].forEach(function (k) { inputs[k].inp.value = d[k]; });
       refresh();
+      box.dispatchEvent(new Event('input', { bubbles: true }));
       flash(resetBtn, 'Reset');
     });
     box.appendChild(resetBtn);
@@ -1099,6 +1120,7 @@ output { font-family: var(--mono); font-weight: 500; }
     }
     var m = M.toMorseString(payload);
     setOut($('send-morse'), m, 'Nothing to send yet.');
+    updateExportInfo();
   }
 
   function refreshAll() {
@@ -1441,6 +1463,231 @@ output { font-family: var(--mono); font-weight: 500; }
     if (!ok) flash(btn, 'Nothing to play');
   });
   $('send-copy').addEventListener('click', function () { copyText(M.toMorseString(sendPayload()), $('send-copy')); });
+
+  /* ---------- Save as audio (MP3 or WAV) ---------- */
+  var EXP_MAX_SECONDS = 300;
+  var EXP_LEAD = 0.3, EXP_TAIL = 0.5;
+  var LAME_URLS = [
+    'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js',
+    'https://unpkg.com/lamejs@1.2.1/lame.min.js'
+  ];
+  var exp = { url: null, file: null, busy: false };
+  var inFrame = false;
+  try { inFrame = window.self !== window.top; } catch (e) { inFrame = true; }
+
+  function expSeconds() {
+    var payload = sendPayload();
+    if (!payload || (mode === 'encoded' && !cipherSpec())) return 0;
+    var sched = M.schedule(payload, sendSpeed.wpm(), sendSpeed.eff());
+    if (!sched.length) return 0;
+    var t = EXP_LEAD + EXP_TAIL;
+    for (var i = 0; i < sched.length; i++) t += sched[i][1];
+    return t;
+  }
+  function fmtTime(sec) {
+    var m = Math.floor(sec / 60);
+    var r = Math.round(sec - m * 60);
+    if (r === 60) { m += 1; r = 0; }
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+  function expSay(text) {
+    var n = $('exp-msg');
+    n.hidden = !text;
+    n.textContent = text || '';
+  }
+  function expClear() {
+    if (exp.url) { try { URL.revokeObjectURL(exp.url); } catch (e) { /* ignore */ } }
+    exp.url = null;
+    exp.file = null;
+    $('exp-result').hidden = true;
+    try { $('exp-audio').removeAttribute('src'); $('exp-audio').load(); } catch (e) { /* ignore */ }
+  }
+  function updateExportInfo() {
+    if (!sendSpeed) return;
+    expClear();
+    expSay(inFrame ? 'Saving and sharing files is blocked inside Claude. Open the installed app or its web address to save the audio. You can still make it here and play the preview.' : '');
+    $('exp-hint').textContent = mode === 'encoded'
+      ? 'Uses the speed and pitch above. The file holds the enciphered message, not your original text.'
+      : 'Uses the speed and pitch above.';
+    var secs = expSeconds();
+    var len = $('exp-len');
+    len.textContent = '';
+    len.appendChild(el('span', null, secs ? 'Length about ' + fmtTime(secs) : 'Type a message to make audio'));
+    var tooLong = secs > EXP_MAX_SECONDS;
+    if (tooLong) {
+      len.appendChild(el('span', null, 'Too long, the limit is ' + fmtTime(EXP_MAX_SECONDS)));
+    }
+    $('exp-mp3').disabled = !secs || tooLong;
+    $('exp-wav').disabled = !secs || tooLong;
+  }
+
+  function toInt16(f) {
+    var o = new Int16Array(f.length);
+    for (var i = 0; i < f.length; i++) {
+      var x = f[i] > 1 ? 1 : (f[i] < -1 ? -1 : f[i]);
+      o[i] = x < 0 ? x * 32768 : x * 32767;
+    }
+    return o;
+  }
+  function wavBlob(samples, sr) {
+    var pcm = toInt16(samples);
+    var n = pcm.length;
+    var buf = new ArrayBuffer(44 + n * 2);
+    var v = new DataView(buf);
+    function w(o, str) { for (var i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); }
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i++) v.setInt16(44 + i * 2, pcm[i], true);
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+
+  // The MP3 encoder (lamejs) is loaded from a CDN the first time it is needed.
+  var lamePromise = null;
+  function loadLame() {
+    if (window.lamejs && window.lamejs.Mp3Encoder) return Promise.resolve(window.lamejs);
+    if (lamePromise) return lamePromise;
+    lamePromise = new Promise(function (resolve, reject) {
+      var i = 0;
+      function next() {
+        if (i >= LAME_URLS.length) { lamePromise = null; reject(new Error('The MP3 encoder could not be loaded.')); return; }
+        var done = false;
+        var sc = document.createElement('script');
+        function fail() { if (done) return; done = true; try { sc.remove(); } catch (e) { /* ignore */ } next(); }
+        sc.onload = function () {
+          if (done) return;
+          done = true;
+          if (window.lamejs && window.lamejs.Mp3Encoder) resolve(window.lamejs); else next();
+        };
+        sc.onerror = fail;
+        sc.src = LAME_URLS[i++];
+        document.head.appendChild(sc);
+        setTimeout(fail, 15000);
+      }
+      next();
+    });
+    return lamePromise;
+  }
+  function mp3Blob(samples, sr, onProgress) {
+    return loadLame().then(function (L) {
+      var enc = new L.Mp3Encoder(1, sr, 64);
+      var pcm = toInt16(samples);
+      var chunks = [];
+      var pos = 0;
+      var BLOCK = 1152;
+      var STEP = BLOCK * 60;
+      return new Promise(function (resolve, reject) {
+        function pump() {
+          try {
+            var end = Math.min(pos + STEP, pcm.length);
+            for (var j = pos; j < end; j += BLOCK) {
+              var out = enc.encodeBuffer(pcm.subarray(j, Math.min(j + BLOCK, end)));
+              if (out && out.length) chunks.push(out.slice());
+            }
+            pos = end;
+            if (onProgress) onProgress(pos / pcm.length);
+            if (pos < pcm.length) { setTimeout(pump, 0); return; }
+            var tail = enc.flush();
+            if (tail && tail.length) chunks.push(tail.slice());
+            if (!chunks.length) throw new Error('The MP3 encoder returned nothing.');
+            resolve(new Blob(chunks, { type: 'audio/mpeg' }));
+          } catch (e) { reject(e); }
+        }
+        pump();
+      });
+    });
+  }
+
+  function stamp() {
+    var d = new Date();
+    function z(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds());
+  }
+  function showExport(blob, ext, secs, note) {
+    expClear();
+    var name = 'morse-' + stamp() + '.' + ext;
+    var file = null;
+    try { file = new File([blob], name, { type: blob.type }); } catch (e) { file = null; }
+    exp.file = file || blob;
+    exp.name = name;
+    exp.url = URL.createObjectURL(blob);
+    $('exp-audio').src = exp.url;
+    var info = $('exp-info');
+    info.textContent = '';
+    info.appendChild(el('span', null, name));
+    info.appendChild(el('span', null, (blob.size < 1048576 ? Math.max(1, Math.round(blob.size / 1024)) + ' KB' : (blob.size / 1048576).toFixed(1) + ' MB')));
+    info.appendChild(el('span', null, fmtTime(secs)));
+    var canShare = false;
+    try { canShare = !!(file && navigator.canShare && navigator.share && navigator.canShare({ files: [file] })); } catch (e) { canShare = false; }
+    $('exp-share').hidden = !canShare || inFrame;
+    $('exp-save').hidden = inFrame;
+    $('exp-result').hidden = false;
+    expSay(note || (inFrame ? 'Saving and sharing files is blocked inside Claude. Open the installed app or its web address to save the audio.' : ''));
+  }
+
+  function makeAudio(kind) {
+    if (exp.busy) return;
+    var payload = sendPayload();
+    if (mode === 'encoded' && !cipherSpec()) { expSay('Fix the cipher settings first.'); return; }
+    var sched = M.schedule(payload, sendSpeed.wpm(), sendSpeed.eff());
+    if (!sched.length) { expSay('Type a message first.'); return; }
+    var secs = expSeconds();
+    if (secs > EXP_MAX_SECONDS) return;
+    exp.busy = true;
+    $('exp-mp3').disabled = true;
+    $('exp-wav').disabled = true;
+    expClear();
+    expSay('Making the audio...');
+    function finish() { exp.busy = false; $('exp-mp3').disabled = false; $('exp-wav').disabled = false; }
+    function makeWav(note) {
+      var x = M.render(sched, { sampleRate: 22050, tone: sendSpeed.tone(), lead: EXP_LEAD, tail: EXP_TAIL });
+      showExport(wavBlob(x, 22050), 'wav', secs, note);
+    }
+    setTimeout(function () {
+      try {
+        if (kind === 'wav') { makeWav(''); finish(); return; }
+        expSay('Loading the MP3 encoder...');
+        var x = M.render(sched, { sampleRate: 44100, tone: sendSpeed.tone(), lead: EXP_LEAD, tail: EXP_TAIL });
+        mp3Blob(x, 44100, function (f) { expSay('Encoding MP3, ' + Math.round(f * 100) + '%'); }).then(function (blob) {
+          showExport(blob, 'mp3', secs, '');
+          finish();
+        }, function () {
+          try { makeWav('The MP3 encoder could not load, so this is a WAV file instead. It plays the same everywhere. Connect to the internet and try Make MP3 again.'); } catch (e2) { expSay('Could not make the audio file.'); }
+          finish();
+        });
+      } catch (e) {
+        expSay('Could not make the audio file.');
+        finish();
+      }
+    }, 30);
+  }
+
+  $('exp-mp3').addEventListener('click', function () { makeAudio('mp3'); });
+  $('exp-wav').addEventListener('click', function () { makeAudio('wav'); });
+  $('exp-share').addEventListener('click', function () {
+    if (!exp.file) return;
+    var btn = $('exp-share');
+    try {
+      navigator.share({ files: [exp.file], title: 'Morse message' }).catch(function (e) {
+        if (e && e.name === 'AbortError') return;
+        flash(btn, 'Share failed, try Save');
+      });
+    } catch (e) { flash(btn, 'Share failed, try Save'); }
+  });
+  $('exp-save').addEventListener('click', function () {
+    if (!exp.url) return;
+    var a = document.createElement('a');
+    a.href = exp.url;
+    a.download = exp.name || 'morse.wav';
+    a.hidden = true;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    flash($('exp-save'), 'Download started');
+  });
+  $('send-speed').addEventListener('input', updateExportInfo);
 
   /* ---------- Koch trainer ---------- */
   var KEY = 'mcl.koch.v1';

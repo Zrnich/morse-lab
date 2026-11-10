@@ -1,6 +1,6 @@
 // Network first for this site's own files, so updates arrive as soon as the phone is online.
 // The saved copy is used when there is no connection.
-const VERSION = 'morse-lab-202611100050';
+const VERSION = 'morse-lab-202611101430';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
