@@ -102,6 +102,8 @@ output { font-family: var(--mono); font-weight: 500; }
 .meter > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.12s linear; }
 .note { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); border-radius: 8px; padding: 12px; font-size: 14px; }
 .err { margin: 0; color: var(--bad); font-size: 14px; }
+.speed { display: grid; gap: 12px; }
+.speed > .btn { justify-self: start; }
 .map { font: 500 14px/1.6 var(--mono); letter-spacing: 0.12em; overflow-wrap: anywhere; }
 .map span { display: block; }
 .map .to { color: var(--accent); }
@@ -222,11 +224,14 @@ output { font-family: var(--mono); font-weight: 500; }
       </div>
       <div class="card">
         <h2>Record with your phone</h2>
-        <p class="hint">If live listening is blocked, record the Morse with your phone's recorder. The recording is decoded right after.</p>
+        <p class="hint" id="rec-hint">Opens your phone's recorder. The recording is decoded right after.</p>
         <div class="row">
-          <label class="btn" for="rec-input">Record and decode</label>
-          <input id="rec-input" type="file" accept="audio/*" capture hidden>
+          <button type="button" class="btn" id="rec-btn">Record and decode</button>
+          <button type="button" class="btn" id="rec-pick" hidden>Choose the recording</button>
         </div>
+        <div class="note" id="rec-msg" hidden></div>
+        <input id="rec-input" type="file" accept="audio/*" capture hidden>
+        <input id="rec-pick-input" type="file" accept="audio/*" hidden>
       </div>
     </section>
 
@@ -975,6 +980,15 @@ output { font-family: var(--mono); font-weight: 500; }
     }
     box.addEventListener('input', refresh);
     refresh();
+    box.classList.add('speed');
+    var resetBtn = el('button', 'btn', 'Reset speed and pitch');
+    resetBtn.type = 'button';
+    resetBtn.addEventListener('click', function () {
+      ['wpm', 'eff', 'tone'].forEach(function (k) { inputs[k].inp.value = d[k]; });
+      refresh();
+      flash(resetBtn, 'Reset');
+    });
+    box.appendChild(resetBtn);
     return {
       wpm: function () { return +inputs.wpm.inp.value; },
       eff: function () { return Math.min(+inputs.eff.inp.value, +inputs.wpm.inp.value); },
@@ -1371,11 +1385,45 @@ output { font-family: var(--mono); font-weight: 500; }
   $('file-redo').addEventListener('click', runFileDecode);
   $('file-copy').addEventListener('click', function () { copyText(last.file, $('file-copy')); });
 
-  $('rec-input').addEventListener('change', function () {
+  /* Record with the phone's own app.
+     Android: a file input with capture hands off to the system voice recorder and returns the recording.
+     iPhone: web pages cannot take a recording back from Voice Memos, so open Voice Memos, then let the user pick the saved file.
+     Anything else: a normal file chooser. */
+  var UA = navigator.userAgent || '';
+  var isIOS = /iPad|iPhone|iPod/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/.test(UA);
+  function takeRecording() {
     var f = this.files && this.files[0];
     if (!f) return;
     showTab('file');
     loadAudioFile(f, $('file-stats'), runFileDecode);
+    this.value = '';
+  }
+  $('rec-input').addEventListener('change', takeRecording);
+  $('rec-pick-input').addEventListener('change', takeRecording);
+  if (isIOS) {
+    $('rec-hint').textContent = 'Opens Voice Memos. Record the Morse, tap the recording, tap Share, then Save to Files. Come back here and tap Choose the recording.';
+    $('rec-pick').hidden = false;
+  } else if (isAndroid) {
+    $('rec-hint').textContent = 'Opens your phone\'s voice recorder. When you finish, the recording is decoded here.';
+  } else {
+    $('rec-hint').textContent = 'On a phone this opens the voice recorder. On a computer it lets you pick an audio file.';
+  }
+  $('rec-pick').addEventListener('click', function () { $('rec-pick-input').click(); });
+  $('rec-btn').addEventListener('click', function () {
+    var msg = $('rec-msg');
+    msg.hidden = true;
+    if (isIOS) {
+      try { window.location.href = 'voicememos://'; } catch (e) { /* handled below */ }
+      setTimeout(function () {
+        if (!document.hidden) {
+          msg.hidden = false;
+          msg.textContent = 'Voice Memos did not open. Open it from your Home Screen, record, save the recording to Files, then tap Choose the recording.';
+        }
+      }, 1500);
+      return;
+    }
+    $('rec-input').click();
   });
 
   /* ---------- Send ---------- */
